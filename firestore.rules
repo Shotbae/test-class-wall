@@ -35,7 +35,7 @@ service cloud.firestore {
       // 학생 및 교사 공통: 5자 이상 50자 이하, 작성자 uid 일치, 서버 타임스탬프
       allow create: if request.auth != null
         && (isTeacher() || isStudent())
-        && request.resource.data.keys().hasOnly(['text', 'createdAt', 'uid', 'authorName'])
+        && request.resource.data.keys().hasOnly(['text', 'createdAt', 'uid', 'authorName', 'aiComment'])
         && request.resource.data.text is string
         && request.resource.data.text.size() >= 5
         && request.resource.data.text.size() <= 50
@@ -43,14 +43,10 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time
         && request.resource.data.uid == request.auth.uid;
 
-      // 삭제:
-      // 1. 교사는 모든 메모 삭제 가능
-      // 2. 학생은 자기가 작성한 메모(resource.data.uid == request.auth.uid)도 본 규칙 정책상 삭제 불가(생성 기능만 부여)하거나 본인 것만 삭제 가능할 수 있으나,
-      //    "교사는 모든 권한, 학생은 자기 것 생성기능만 부여, 다른 사람 것을 건들지 못한다"에 따라
-      //    교사는 delete 가능, 학생 및 타인은 delete 불가 (교사만 삭제 관리)
+      // 삭제: 교사만 가능
       allow delete: if isTeacher();
 
-      // 수정: 교사만 가능 (학생은 다른 사람 것은 물론 수정 권한 없음)
+      // 수정: 교사만 가능 (AI 코멘트 추가 등)
       allow update: if isTeacher();
     }
 

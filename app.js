@@ -9,6 +9,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  updateDoc,
   query,
   orderBy,
   serverTimestamp
@@ -93,6 +94,39 @@ async function deleteMemo(id) {
   await deleteDoc(doc(db, "memos", id));
 }
 
+// AI 코멘트를 요청하고 Firestore에 저장합니다. (교사만 권한 부여)
+async function requestAiComment(memoId, text) {
+  if (currentUserRole !== "teacher") {
+    alert("AI 코멘트 요청 권한은 교사에게만 있습니다.");
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/gemini", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text })
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `서버 오류 (${res.status})`);
+    }
+
+    const data = await res.json();
+    if (data.comment) {
+      // Firestore 메모 문서에 aiComment 필드 업데이트
+      await updateDoc(doc(db, "memos", memoId), {
+        aiComment: data.comment
+      });
+      await render();
+    }
+  } catch (err) {
+    console.error("AI 코멘트 요청 실패:", err);
+    alert("AI 코멘트를 가져오지 못했습니다: " + err.message);
+  }
+}
+
 
 // ===================================================
 // 화면 그리기
@@ -113,8 +147,24 @@ function makeMemo(memo) {
   const div = document.createElement("div");
   div.className = "memo";
 
-  // 교사(teacher)만 삭제 버튼을 볼 수 있고 삭제할 수 있습니다.
+  // 상단 버튼 영역 (교사용)
   if (currentUserRole === "teacher") {
+    const actions = document.createElement("div");
+    actions.className = "memo-actions";
+
+    // AI 코멘트 생성 버튼
+    const aiBtn = document.createElement("button");
+    aiBtn.textContent = memo.aiComment ? "🤖 AI 재작성" : "🤖 AI 코멘트";
+    aiBtn.title = "Gemini AI 코멘트 달기";
+    aiBtn.addEventListener("click", async function () {
+      aiBtn.disabled = true;
+      aiBtn.textContent = "생성 중...";
+      await requestAiComment(memo.id, memo.text);
+      aiBtn.disabled = false;
+    });
+    actions.appendChild(aiBtn);
+
+    // 삭제 버튼
     const del = document.createElement("button");
     del.textContent = "×";
     del.title = "삭제 (교사 전용)";
@@ -122,12 +172,33 @@ function makeMemo(memo) {
       await deleteMemo(memo.id);
       await render();
     });
-    div.appendChild(del);
+    actions.appendChild(del);
+
+    div.appendChild(actions);
   }
 
-  const span = document.createElement("span");
-  span.textContent = memo.text;
-  div.appendChild(span);
+  // 메모 본문
+  const textDiv = document.createElement("div");
+  textDiv.className = "memo-text";
+  textDiv.textContent = memo.text;
+  div.appendChild(textDiv);
+
+  // AI 코멘트가 있을 경우 표시
+  if (memo.aiComment) {
+    const aiDiv = document.createElement("div");
+    aiDiv.className = "ai-comment";
+
+    const aiTitle = document.createElement("div");
+    aiTitle.className = "ai-comment-title";
+    aiTitle.textContent = "🤖 AI 교사 피드백";
+
+    const aiContent = document.createElement("div");
+    aiContent.textContent = memo.aiComment;
+
+    aiDiv.appendChild(aiTitle);
+    aiDiv.appendChild(aiContent);
+    div.appendChild(aiDiv);
+  }
 
   return div;
 }
