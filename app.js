@@ -10,7 +10,8 @@ import {
   deleteDoc,
   doc,
   query,
-  orderBy
+  orderBy,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
 // Firebase 프로젝트 설정
@@ -50,10 +51,14 @@ async function loadMemos() {
 
 // 메모를 새로 씁니다.
 // Firestore의 memos 컬렉션에 새 문서를 추가합니다.
+// 입력 내용이 5글자 이상일 때만 저장됩니다.
 async function addMemo(text) {
+  if (!text || text.length < 5) {
+    return;
+  }
   await addDoc(memosCol, {
     text: text,
-    createdAt: Date.now()
+    createdAt: serverTimestamp()
   });
 }
 
@@ -112,6 +117,11 @@ input.addEventListener("keydown", async function (e) {
 
     const text = input.value.trim();
     if (text === "") return;
+
+    if (text.length < 5) {
+      alert("메모는 5글자 이상 입력해 주세요.");
+      return;
+    }
 
     input.value = "";
     await addMemo(text);
