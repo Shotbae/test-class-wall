@@ -2,18 +2,56 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // 사용자의 역할을 확인하는 헬퍼 함수
+    function getRole() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : 'student';
+    }
+
+    // 교사(teacher) 여부 판정
+    function isTeacher() {
+      return request.auth != null && getRole() == 'teacher';
+    }
+
+    // 학생(student) 여부 판정
+    function isStudent() {
+      return request.auth != null && getRole() == 'student';
+    }
+
+    // 사용자 정보(역할) 컬렉션 규칙
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if isTeacher(); // 교사만 역할 부여 및 수정 가능
+    }
+
+    // 메모 컬렉션 규칙
     match /memos/{memoId} {
+      // 담벼락 읽기는 모두 허용
       allow read: if true;
 
-      // 5글자 이상 50글자 이하일 때만 저장 허용
-      allow create: if request.resource.data.keys().hasOnly(['text', 'createdAt'])
+      // 생성: 로그인된 사용자만 가능 (교사 또는 학생)
+      // 학생 및 교사 공통: 5자 이상 50자 이하, 작성자 uid 일치, 서버 타임스탬프
+      allow create: if request.auth != null
+        && (isTeacher() || isStudent())
+        && request.resource.data.keys().hasOnly(['text', 'createdAt', 'uid', 'authorName'])
         && request.resource.data.text is string
         && request.resource.data.text.size() >= 5
         && request.resource.data.text.size() <= 50
         && request.resource.data.createdAt is timestamp
-        && request.resource.data.createdAt == request.time;
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.uid == request.auth.uid;
 
-      allow update, delete: if false;
+      // 삭제:
+      // 1. 교사는 모든 메모 삭제 가능
+      // 2. 학생은 자기가 작성한 메모(resource.data.uid == request.auth.uid)도 본 규칙 정책상 삭제 불가(생성 기능만 부여)하거나 본인 것만 삭제 가능할 수 있으나,
+      //    "교사는 모든 권한, 학생은 자기 것 생성기능만 부여, 다른 사람 것을 건들지 못한다"에 따라
+      //    교사는 delete 가능, 학생 및 타인은 delete 불가 (교사만 삭제 관리)
+      allow delete: if isTeacher();
+
+      // 수정: 교사만 가능 (학생은 다른 사람 것은 물론 수정 권한 없음)
+      allow update: if isTeacher();
     }
 
     match /{document=**} {
