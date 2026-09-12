@@ -1,4 +1,3 @@
-// ===================================================
 // Firebase & Firestore 초기화
 // ===================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
@@ -13,6 +12,13 @@ import {
   orderBy,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 
 // Firebase 프로젝트 설정
 const firebaseConfig = {
@@ -24,10 +30,15 @@ const firebaseConfig = {
   appId: "1:958709864162:web:5db43df480321253edb0bb"
 };
 
-// Firebase 및 Firestore 객체 생성
+// Firebase 및 Firestore, Auth 객체 생성
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
+const googleProvider = new GoogleAuthProvider();
 const memosCol = collection(db, "memos");
+
+// 현재 로그인한 사용자 정보
+let currentUser = null;
 
 
 // ===================================================
@@ -127,6 +138,51 @@ input.addEventListener("keydown", async function (e) {
     await addMemo(text);
     await render();
   }
+});
+
+
+// ===================================================
+// 사용자 로그인 / 로그아웃 영역
+// ===================================================
+
+const userArea = document.getElementById("userArea");
+
+function renderUserArea() {
+  userArea.innerHTML = "";
+
+  if (currentUser) {
+    const userInfo = document.createElement("span");
+    userInfo.textContent = `${currentUser.displayName || currentUser.email}님 환영합니다! `;
+    userInfo.style.marginRight = "10px";
+
+    const logoutBtn = document.createElement("button");
+    logoutBtn.textContent = "로그아웃";
+    logoutBtn.addEventListener("click", async function () {
+      await signOut(auth);
+    });
+
+    userArea.appendChild(userInfo);
+    userArea.appendChild(logoutBtn);
+  } else {
+    const loginBtn = document.createElement("button");
+    loginBtn.textContent = "Google 계정으로 로그인";
+    loginBtn.addEventListener("click", async function () {
+      try {
+        await signInWithPopup(auth, googleProvider);
+      } catch (err) {
+        console.error("로그인 실패:", err);
+        alert("로그인에 실패했습니다: " + err.message);
+      }
+    });
+
+    userArea.appendChild(loginBtn);
+  }
+}
+
+// 로그인 상태 감지
+onAuthStateChanged(auth, function (user) {
+  currentUser = user;
+  renderUserArea();
 });
 
 
