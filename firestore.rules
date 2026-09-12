@@ -3,27 +3,23 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 사용자의 역할을 확인하는 헬퍼 함수
-    function getRole() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
-        : 'student';
-    }
-
-    // 교사(teacher) 여부 판정
+    // users/{uid} 문서의 role 필드가 'teacher'인지 여부로 교사 판정 (이메일 하드코딩 없음)
     function isTeacher() {
-      return request.auth != null && getRole() == 'teacher';
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher';
     }
 
-    // 학생(student) 여부 판정
+    // 학생 여부 판정 (교사가 아니면 기본 학생)
     function isStudent() {
-      return request.auth != null && getRole() == 'student';
+      return request.auth != null && !isTeacher();
     }
 
     // 사용자 정보(역할) 컬렉션 규칙
     match /users/{userId} {
       allow read: if request.auth != null;
-      allow write: if isTeacher(); // 교사만 역할 부여 및 수정 가능
+      // 교사만 권한 부여 및 수정 가능
+      allow write: if isTeacher();
     }
 
     // 메모 컬렉션 규칙
@@ -32,7 +28,7 @@ service cloud.firestore {
       allow read: if true;
 
       // 생성: 로그인된 사용자만 가능 (교사 또는 학생)
-      // 학생 및 교사 공통: 5자 이상 50자 이하, 작성자 uid 일치, 서버 타임스탬프
+      // 5자 이상 50자 이하, 작성자 uid 일치, 서버 타임스탬프
       allow create: if request.auth != null
         && (isTeacher() || isStudent())
         && request.resource.data.keys().hasOnly(['text', 'createdAt', 'uid', 'authorName', 'aiComment'])

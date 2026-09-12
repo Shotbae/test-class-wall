@@ -9,6 +9,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  setDoc,
   updateDoc,
   query,
   orderBy,
@@ -242,15 +243,18 @@ input.addEventListener("keydown", async function (e) {
 const userArea = document.getElementById("userArea");
 
 // Firestore의 users/{uid} 문서에서 역할(teacher/student)을 조회합니다.
-async function fetchUserRole(uid) {
+async function fetchUserRole(user) {
+  if (!user) return "student";
+
   try {
-    const userDoc = await getDoc(doc(db, "users", uid));
+    const userDoc = await getDoc(doc(db, "users", user.uid));
     if (userDoc.exists() && userDoc.data().role) {
       return userDoc.data().role;
     }
   } catch (err) {
     console.error("사용자 역할 조회 실패:", err);
   }
+
   return "student"; // 기본값은 학생
 }
 
@@ -259,8 +263,9 @@ function renderUserArea() {
 
   if (currentUser) {
     const roleBadge = currentUserRole === "teacher" ? " [교사]" : " [학생]";
+    const displayName = currentUser.displayName || (currentUserRole === "teacher" ? "선생님" : "학생");
     const userInfo = document.createElement("span");
-    userInfo.textContent = `${currentUser.displayName || currentUser.email}님${roleBadge} 환영합니다! `;
+    userInfo.textContent = `${displayName}님${roleBadge} 환영합니다! `;
     userInfo.style.marginRight = "10px";
 
     const logoutBtn = document.createElement("button");
@@ -291,7 +296,7 @@ function renderUserArea() {
 onAuthStateChanged(auth, async function (user) {
   currentUser = user;
   if (user) {
-    currentUserRole = await fetchUserRole(user.uid);
+    currentUserRole = await fetchUserRole(user);
   } else {
     currentUserRole = "student";
   }
